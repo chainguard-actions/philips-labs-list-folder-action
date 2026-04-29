@@ -1,5 +1,7 @@
 # philips-labs/list-folder-action
 
+Get a list of folders in a directory and return them as a json list
+
 Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at [https://github.com/philips-labs/list-folder-action](https://github.com/philips-labs/list-folder-action).
 
 ## Versions

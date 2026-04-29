@@ -1,5 +1,6 @@
 {
   "owner": "philips-labs",
   "name": "list-folder-action",
-  "visibility": ""
+  "visibility": "internal",
+  "description": "Get a list of folders in a directory and return them as a json list"
 }
