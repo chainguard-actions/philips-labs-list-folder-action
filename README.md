@@ -1,6 +1,12 @@
 # philips-labs/list-folder-action
 
-Hardened GitHub Action by [Chainguard](https://www.chainguard.dev).
+Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at [https://github.com/philips-labs/list-folder-action](https://github.com/philips-labs/list-folder-action).
+
+## Versions
+
+| Version | Tag | Upstream commit |
+|---------|-----|-----------------|
+| v2.1 | [`v2.1`](https://github.com/chainguard-actions/list-folder-action/tree/v2.1) | — |
 
 ## Privacy
 
