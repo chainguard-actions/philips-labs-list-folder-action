@@ -31,12 +31,18 @@ jobs:
             echo "FAIL: expected JSON array, got $type"
             exit 1
           fi
-          # Verify expected folders are present
+          echo "PASS: output is a valid JSON array"
+
+      - name: Assert folders output contains expected directories
+        env:
+          ACTUAL: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "actual: $ACTUAL"
           for folder in alpha beta gamma; do
-            found=$(echo "$ACTUAL" | jq -r --arg f "$folder" 'index($f)')
-            if [ "$found" = "null" ]; then
+            found=$(echo "$ACTUAL" | jq -r --arg f "$folder" 'map(select(. == $f)) | length')
+            if [ "$found" -lt 1 ]; then
               echo "FAIL: expected folder '$folder' not found in output: $ACTUAL"
               exit 1
             fi
           done
-          echo "PASS"
+          echo "PASS: all expected folders found"
