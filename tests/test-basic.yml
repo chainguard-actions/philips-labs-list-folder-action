@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create test directory structure
+      - name: Create test directories
         run: |
           mkdir -p /tmp/test-folders/alpha
           mkdir -p /tmp/test-folders/beta
@@ -18,31 +18,18 @@ jobs:
         with:
           path: /tmp/test-folders
 
-      - name: Assert folders output is valid JSON array
-        env:
-          ACTUAL: ${{ steps.action.outputs.folders }}
-        run: |
-          echo "actual: $ACTUAL"
-          # Verify it is valid JSON
-          echo "$ACTUAL" | jq . > /dev/null || { echo "FAIL: output is not valid JSON"; exit 1; }
-          # Verify it is an array
-          type=$(echo "$ACTUAL" | jq -r 'type')
-          if [ "$type" != "array" ]; then
-            echo "FAIL: expected JSON array, got $type"
-            exit 1
-          fi
-          echo "PASS: output is a valid JSON array"
-
       - name: Assert folders output contains expected directories
         env:
           ACTUAL: ${{ steps.action.outputs.folders }}
         run: |
           echo "actual: $ACTUAL"
+          # Check that the output is valid JSON array
+          echo "$ACTUAL" | jq -e 'type == "array"' || { echo "FAIL: output is not a JSON array"; exit 1; }
+          # Check that all three folders are present
           for folder in alpha beta gamma; do
-            found=$(echo "$ACTUAL" | jq -r --arg f "$folder" 'map(select(. == $f)) | length')
-            if [ "$found" -lt 1 ]; then
+            if ! echo "$ACTUAL" | jq -e --arg f "$folder" 'index($f) != null' > /dev/null; then
               echo "FAIL: expected folder '$folder' not found in output: $ACTUAL"
               exit 1
             fi
           done
-          echo "PASS: all expected folders found"
+          echo "PASS"
