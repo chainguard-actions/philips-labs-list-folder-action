@@ -6,30 +6,61 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Create test directories
+      - name: Pre-install tree and jq
         run: |
-          mkdir -p /tmp/test-folders/alpha
-          mkdir -p /tmp/test-folders/beta
-          mkdir -p /tmp/test-folders/gamma
-
+          sudo apt-get update -qq
+          sudo apt-get install -y tree jq
+          tree --version
+          jq --version
+      - name: Verify fixture directories exist
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          ls -la "$GITHUB_WORKSPACE/tests/fixtures/sample-folders/"
+          echo "alpha exists: $(test -d "$GITHUB_WORKSPACE/tests/fixtures/sample-folders/alpha" && echo yes || echo no)"
+          echo "beta exists: $(test -d "$GITHUB_WORKSPACE/tests/fixtures/sample-folders/beta" && echo yes || echo no)"
+          echo "gamma exists: $(test -d "$GITHUB_WORKSPACE/tests/fixtures/sample-folders/gamma" && echo yes || echo no)"
+          echo "--- tree output ---"
+          tree -J -d -L 1 "$GITHUB_WORKSPACE/tests/fixtures/sample-folders/"
+          echo "--- jq parse ---"
+          tree -J -d -L 1 "$GITHUB_WORKSPACE/tests/fixtures/sample-folders/" | jq -c '.[0].contents | map(.name)'
       - id: action
         uses: .
         with:
-          path: /tmp/test-folders
-
-      - name: Assert folders output contains expected directories
+          path: ${{ github.workspace }}/tests/fixtures/sample-folders
+      - name: Assert folders output is valid JSON array
         env:
           ACTUAL: ${{ steps.action.outputs.folders }}
         run: |
           echo "actual: $ACTUAL"
-          # Check that the output is valid JSON array
-          echo "$ACTUAL" | jq -e 'type == "array"' || { echo "FAIL: output is not a JSON array"; exit 1; }
-          # Check that all three folders are present
+          # Verify it is valid JSON
+          echo "$ACTUAL" | jq . > /dev/null || { echo "FAIL: output is not valid JSON"; exit 1; }
+          # Verify it is an array
+          TYPE=$(echo "$ACTUAL" | jq -r 'type')
+          if [ "$TYPE" != "array" ]; then
+            echo "FAIL: expected JSON array, got $TYPE"
+            exit 1
+          fi
+          echo "PASS: output is a valid JSON array"
+      - name: Assert expected folders are present
+        env:
+          ACTUAL: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "actual: $ACTUAL"
           for folder in alpha beta gamma; do
             if ! echo "$ACTUAL" | jq -e --arg f "$folder" 'index($f) != null' > /dev/null; then
-              echo "FAIL: expected folder '$folder' not found in output: $ACTUAL"
+              echo "FAIL: expected folder '$folder' not found in $ACTUAL"
               exit 1
             fi
+            echo "PASS: folder '$folder' found"
           done
-          echo "PASS"
+      - name: Assert folder count is 3
+        env:
+          ACTUAL: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "actual: $ACTUAL"
+          COUNT=$(echo "$ACTUAL" | jq 'length')
+          if [ "$COUNT" != "3" ]; then
+            echo "FAIL: expected 3 folders, got $COUNT"
+            exit 1
+          fi
+          echo "PASS: folder count is 3"

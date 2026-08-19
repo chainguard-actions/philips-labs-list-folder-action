@@ -38,5 +38,5 @@ runs:
         cd "$INPUT_PATH"
         folders=$(tree -J -d -L 1 | jq -c '.[0].contents | map(.name)')
         echo "$folders"
-        safe_folders=$(printf '%s' "$folders" | tr -d '\n\r')
-        echo "folders=$safe_folders" >> "$GITHUB_OUTPUT"
+        safe=$(printf '%s' "$folders" | tr -d '\n\r')
+        echo "folders=$safe" >> "$GITHUB_OUTPUT"

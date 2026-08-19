@@ -1,0 +1,68 @@
+name: Test nested folder listing only returns top-level
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Pre-install tree and jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tree jq
+
+      - name: Create nested test directory structure
+        run: |
+          mkdir -p /tmp/test-nested/parent1/child1
+          mkdir -p /tmp/test-nested/parent1/child2
+          mkdir -p /tmp/test-nested/parent2/child3
+
+      - id: action
+        uses: .
+        with:
+          path: /tmp/test-nested
+
+      - name: Assert output is valid JSON
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "actual: $FOLDERS"
+          if ! echo "$FOLDERS" | jq . > /dev/null 2>&1; then
+            echo "FAIL: output is not valid JSON"
+            exit 1
+          fi
+          echo "PASS: output is valid JSON"
+
+      - name: Assert count is 2 (only top-level folders)
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "actual: $FOLDERS"
+          COUNT=$(echo "$FOLDERS" | jq 'length')
+          echo "count: $COUNT"
+          if [ "$COUNT" != "2" ]; then
+            echo "FAIL: expected 2 top-level folders, got $COUNT"
+            exit 1
+          fi
+          echo "PASS: folder count is 2"
+
+      - name: Assert top-level folder names are correct
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "actual: $FOLDERS"
+          for dir in parent1 parent2; do
+            if ! echo "$FOLDERS" | jq -e --arg d "$dir" 'index($d) != null' > /dev/null 2>&1; then
+              echo "FAIL: expected '$dir' to be in folders output"
+              exit 1
+            fi
+            echo "PASS: '$dir' found in output"
+          done
+          for dir in child1 child2 child3; do
+            if echo "$FOLDERS" | jq -e --arg d "$dir" 'index($d) != null' > /dev/null 2>&1; then
+              echo "FAIL: '$dir' should NOT be in top-level folders output"
+              exit 1
+            fi
+            echo "PASS: '$dir' correctly not in output"
+          done
