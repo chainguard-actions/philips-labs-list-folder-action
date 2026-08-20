@@ -1,0 +1,58 @@
+name: Test folder listing depth is 1
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify fixture directories exist
+        run: |
+          echo "Checking fixture directories..."
+          ls -la "$GITHUB_WORKSPACE/tests/fixtures/depth/"
+          for name in top-level-a top-level-b; do
+            if [ ! -d "$GITHUB_WORKSPACE/tests/fixtures/depth/$name" ]; then
+              echo "FAIL: fixture directory '$name' does not exist"
+              exit 1
+            fi
+          done
+          echo "All fixture directories present"
+
+      - id: action
+        uses: .
+        with:
+          path: ${{ github.workspace }}/tests/fixtures/depth
+
+      - name: Assert only top-level folders are listed
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "folders: $FOLDERS"
+          # Verify it is valid JSON
+          if ! echo "$FOLDERS" | jq . > /dev/null 2>&1; then
+            echo "FAIL: output is not valid JSON"
+            exit 1
+          fi
+          # Should only have 2 top-level folders
+          COUNT=$(echo "$FOLDERS" | jq 'length')
+          echo "count: $COUNT"
+          if [ "$COUNT" -ne 2 ]; then
+            echo "FAIL: expected 2 top-level folders, got $COUNT"
+            exit 1
+          fi
+          # Top-level folders should be present
+          for name in top-level-a top-level-b; do
+            if ! echo "$FOLDERS" | jq -e --arg n "$name" 'index($n) != null' > /dev/null 2>&1; then
+              echo "FAIL: expected folder '$name' not found in output: $FOLDERS"
+              exit 1
+            fi
+          done
+          # Nested folders should NOT be present
+          for name in nested-a1 nested-a2 nested-b1; do
+            if echo "$FOLDERS" | jq -e --arg n "$name" 'index($n) != null' > /dev/null 2>&1; then
+              echo "FAIL: nested folder '$name' should not appear in output: $FOLDERS"
+              exit 1
+            fi
+          done
+          echo "PASS: only top-level folders listed"

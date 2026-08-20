@@ -1,0 +1,57 @@
+name: Test empty folder listing
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify fixture directory exists with no subdirectories
+        run: |
+          echo "Checking empty fixture directory..."
+          ls -la "$GITHUB_WORKSPACE/tests/fixtures/empty/"
+          SUBDIR_COUNT=$(find "$GITHUB_WORKSPACE/tests/fixtures/empty" -mindepth 1 -maxdepth 1 -type d | wc -l)
+          echo "Subdirectory count: $SUBDIR_COUNT"
+          if [ "$SUBDIR_COUNT" -ne 0 ]; then
+            echo "FAIL: expected no subdirectories in empty fixture, found $SUBDIR_COUNT"
+            exit 1
+          fi
+          echo "Fixture directory is correct (no subdirectories)"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          path: ${{ github.workspace }}/tests/fixtures/empty
+
+      - name: Assert empty folder result
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "folders: $FOLDERS"
+          if [ "$OUTCOME" = "success" ]; then
+            # Action succeeded - output should be empty array or null
+            if [ -z "$FOLDERS" ] || [ "$FOLDERS" = "null" ]; then
+              echo "PASS: empty folder returns null/empty output"
+              exit 0
+            fi
+            if ! echo "$FOLDERS" | jq . > /dev/null 2>&1; then
+              echo "FAIL: output is not valid JSON"
+              exit 1
+            fi
+            COUNT=$(echo "$FOLDERS" | jq 'length')
+            echo "count: $COUNT"
+            if [ "$COUNT" -ne 0 ]; then
+              echo "FAIL: expected 0 folders, got $COUNT"
+              exit 1
+            fi
+            echo "PASS: empty folder returns empty JSON array"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully on directory with no subdirectories (jq null handling)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

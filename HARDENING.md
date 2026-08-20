@@ -8,7 +8,7 @@
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
-**Harden Agent Version:** `1`
+**Harden Agent Version:** `2`
 
 Action **philips-labs--list-folder-action/v2.1** was hardened automatically. 3 finding(s) were identified and resolved across 1 iteration(s).
 
@@ -16,19 +16,19 @@ Action **philips-labs--list-folder-action/v2.1** was hardened automatically. 3 f
 
 ### script-injection (severity: high)
 
-Sub-rule (a): The expression `${{ inputs.path }}` is directly interpolated inside a `run:` shell command: `cd ${{ inputs.path }}`. This substitution happens before the shell parses the command, so a malicious caller can supply a path value containing shell metacharacters (e.g. `; malicious-command`) to achieve arbitrary command execution. The fix is to pass the input via an `env:` variable and reference it as a quoted shell variable: `env: INPUT_PATH: ${{ inputs.path }}` then `cd "$INPUT_PATH"`.
+Rule (a) violation: The `inputs.path` value is directly interpolated via `${{ inputs.path }}` inside a `run:` shell command (`cd ${{ inputs.path }}`). Before the shell ever sees the command, GitHub Actions substitutes the raw input string into it, allowing an attacker to inject arbitrary shell commands by supplying a malicious path value (e.g., `.; malicious-command`). The fix is to pass the input through an `env:` variable and double-quote the shell expansion: set `env: INPUT_PATH: ${{ inputs.path }}` and use `cd "$INPUT_PATH"` in the script.
 
 Locations:
 
-- `action.yml:18`
+- `action.yml:16`
 
 ### github-env-injection (severity: high)
 
-The `run:` block writes `folders=$folders` to `$GITHUB_OUTPUT` (line 21) without the required sanitization step (`printf '%s' "$folders" | tr -d '\n\r'`). The `$folders` variable is derived from `tree` output executed in a directory controlled by the attacker-supplied `inputs.path`. A crafted directory structure could inject newlines into the output, allowing an attacker to smuggle additional key=value pairs into `$GITHUB_OUTPUT` and potentially override subsequent step outputs.
+The `folders` variable is derived from `tree` output of the attacker-controlled `inputs.path` directory, then written unsanitized to `$GITHUB_OUTPUT` via `echo "folders=$folders" >> $GITHUB_OUTPUT`. A crafted directory name containing newline characters could inject additional key=value pairs into the GITHUB_OUTPUT file, poisoning downstream step outputs. The fix is to sanitize before writing: `safe=$(printf '%s' "$folders" | tr -d '\n\r')` and then `echo "folders=$safe" >> "$GITHUB_OUTPUT"`.
 
 Locations:
 
-- `action.yml:21`
+- `action.yml:19`
 
 ### static-inline-injection (severity: high)
 
@@ -42,9 +42,9 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** script-injection, static-inline-injection, github-env-injection
+**Fixes applied:** script-injection, github-env-injection, static-inline-injection
 
 **Notes:**
 
-Fixed action.yml step 'set-folders': (1) Moved `${{ inputs.path }}` into an `env:` block as `INPUT_PATH` and replaced `cd ${{ inputs.path }}` with `cd "$INPUT_PATH"` to prevent shell metacharacter injection. (2) Added newline sanitization before writing to $GITHUB_OUTPUT: `safe=$(printf '%s' "$folders" | tr -d '\n\r')` and then `echo "folders=$safe" >> "$GITHUB_OUTPUT"` to prevent newline injection attacks via crafted directory structures.
+Fixed hardened/action/action.yml: (1) Moved `${{ inputs.path }}` from the run: block into an env: variable `INPUT_PATH` and used `cd "$INPUT_PATH"` to prevent shell injection. (2) Added `safe=$(printf '%s' "$folders" | tr -d '\n\r')` and wrote `$safe` to `$GITHUB_OUTPUT` instead of the raw `$folders` value to prevent newline-based GITHUB_OUTPUT injection. (3) Quoted `$GITHUB_OUTPUT` and `$folders` in echo for robustness.
 

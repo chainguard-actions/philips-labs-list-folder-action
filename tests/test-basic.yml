@@ -7,36 +7,56 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create test directory structure
+      - name: Verify fixture directories exist
         run: |
-          mkdir -p /tmp/test-folders/alpha
-          mkdir -p /tmp/test-folders/beta
-          mkdir -p /tmp/test-folders/gamma
+          echo "Checking fixture directories..."
+          ls -la "$GITHUB_WORKSPACE/tests/fixtures/basic/"
+          for name in alpha beta gamma; do
+            if [ ! -d "$GITHUB_WORKSPACE/tests/fixtures/basic/$name" ]; then
+              echo "FAIL: fixture directory '$name' does not exist"
+              exit 1
+            fi
+          done
+          echo "All fixture directories present"
 
       - id: action
         uses: .
         with:
-          path: /tmp/test-folders
+          path: ${{ github.workspace }}/tests/fixtures/basic
 
-      - name: Assert folders output is valid JSON array
+      - name: Assert folders output is a valid JSON array
         env:
-          ACTUAL: ${{ steps.action.outputs.folders }}
+          FOLDERS: ${{ steps.action.outputs.folders }}
         run: |
-          echo "actual: $ACTUAL"
-          # Verify it is valid JSON
-          echo "$ACTUAL" | jq . > /dev/null || { echo "FAIL: output is not valid JSON"; exit 1; }
-          # Verify it is an array
-          type=$(echo "$ACTUAL" | jq -r 'type')
-          if [ "$type" != "array" ]; then
-            echo "FAIL: expected JSON array, got $type"
+          echo "folders: $FOLDERS"
+          if ! echo "$FOLDERS" | jq . > /dev/null 2>&1; then
+            echo "FAIL: output is not valid JSON"
             exit 1
           fi
-          # Verify expected folders are present
-          for folder in alpha beta gamma; do
-            found=$(echo "$ACTUAL" | jq -r --arg f "$folder" 'index($f)')
-            if [ "$found" = "null" ]; then
-              echo "FAIL: folder '$folder' not found in output: $ACTUAL"
+          echo "PASS: output is valid JSON"
+
+      - name: Assert folders contains expected directories
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "folders: $FOLDERS"
+          for name in alpha beta gamma; do
+            if ! echo "$FOLDERS" | jq -e --arg n "$name" 'index($n) != null' > /dev/null 2>&1; then
+              echo "FAIL: expected folder '$name' not found in output: $FOLDERS"
               exit 1
             fi
           done
-          echo "PASS"
+          echo "PASS: all expected folders found"
+
+      - name: Assert folders count is 3
+        env:
+          FOLDERS: ${{ steps.action.outputs.folders }}
+        run: |
+          echo "folders: $FOLDERS"
+          COUNT=$(echo "$FOLDERS" | jq 'length')
+          echo "count: $COUNT"
+          if [ "$COUNT" -ne 3 ]; then
+            echo "FAIL: expected 3 folders, got $COUNT"
+            exit 1
+          fi
+          echo "PASS: folder count is 3"
